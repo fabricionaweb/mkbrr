@@ -152,8 +152,8 @@ func validateJob(job BatchJob) error {
 		return fmt.Errorf("output is required")
 	}
 
-	if job.PieceLength != 0 && (job.PieceLength < 14 || job.PieceLength > 24) {
-		return fmt.Errorf("piece length must be between 14 and 24")
+	if job.PieceLength != 0 && (job.PieceLength < 14 || job.PieceLength > 27) {
+		return fmt.Errorf("piece length must be between 14 and 27")
 	}
 
 	return nil

@@ -35,10 +35,9 @@ func TestCreateTorrent_FormatRouting(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "v2 format (not implemented)",
-			format:      FormatV2,
-			wantErr:     true,
-			errContains: "not yet implemented",
+			name:    "v2 format (implemented)",
+			format:  FormatV2,
+			wantErr: false,
 		},
 		{
 			name:        "hybrid format (not implemented)",

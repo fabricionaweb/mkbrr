@@ -129,7 +129,7 @@ func CreateTorrent(opts CreateOptions) (*Torrent, error) {
 	case 0, FormatV1:
 		return createV1(opts)
 	case FormatV2:
-		return nil, fmt.Errorf("BitTorrent v2 format is not yet implemented")
+		return createV2(opts)
 	case FormatHybrid:
 		return nil, fmt.Errorf("BitTorrent hybrid format is not yet implemented")
 	default:
