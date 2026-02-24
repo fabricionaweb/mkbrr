@@ -40,6 +40,8 @@ type createOptions struct {
 	infoOnly            bool
 	skipPrefix          bool
 	failOnSeasonWarning bool
+	v2                  bool
+	hybrid              bool
 }
 
 var options = createOptions{
@@ -112,6 +114,9 @@ func init() {
 	createCmd.Flags().StringArrayVarP(&options.excludePatterns, "exclude", "", nil, "exclude files matching these patterns (e.g., \"*.nfo,*.jpg\" or --exclude \"*.nfo\" --exclude \"*.jpg\")")
 	createCmd.Flags().StringArrayVarP(&options.includePatterns, "include", "", nil, "include only files matching these patterns (e.g., \"*.mkv,*.mp4\" or --include \"*.mkv\" --include \"*.mp4\")")
 	createCmd.Flags().IntVar(&options.createWorkers, "workers", 0, "number of worker goroutines for hashing (0 for automatic)")
+	createCmd.Flags().BoolVar(&options.v2, "v2", false, "use BitTorrent v2 format (pure v2, requires v2-capable clients)")
+	createCmd.Flags().BoolVar(&options.hybrid, "hybrid", false, "use BitTorrent hybrid format (v1+v2, maximum compatibility)")
+	createCmd.MarkFlagsMutuallyExclusive("v2", "hybrid")
 
 	createCmd.Flags().String("cpuprofile", "", "write cpu profile to file (development flag)")
 
@@ -191,6 +196,15 @@ func buildCreateOptions(cmd *cobra.Command, inputPath string, opts createOptions
 		Workers:                 opts.createWorkers,
 		OutputDir:               opts.outputDir,
 		FailOnSeasonPackWarning: opts.failOnSeasonWarning,
+	}
+
+	// Set format based on flags (v1 is default)
+	if opts.v2 {
+		createOpts.Format = torrent.FormatV2
+	} else if opts.hybrid {
+		createOpts.Format = torrent.FormatHybrid
+	} else {
+		createOpts.Format = torrent.FormatV1
 	}
 
 	// If a preset is specified, load the preset options and merge with command-line flags
@@ -277,6 +291,15 @@ func buildCreateOptions(cmd *cobra.Command, inputPath string, opts createOptions
 
 		if presetOpts.Workers != 0 && !cmd.Flags().Changed("workers") {
 			createOpts.Workers = presetOpts.Workers
+		}
+
+		// Handle format from preset (only if CLI flags not set)
+		if presetOpts.Format != "" && !cmd.Flags().Changed("v2") && !cmd.Flags().Changed("hybrid") {
+			format, err := torrent.ParseFormat(presetOpts.Format)
+			if err != nil {
+				return createOpts, fmt.Errorf("invalid format in preset: %w", err)
+			}
+			createOpts.Format = format
 		}
 	}
 

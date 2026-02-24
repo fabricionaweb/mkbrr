@@ -65,6 +65,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "format": {
+          "type": "string",
+          "description": "BitTorrent format version (1/v1=v1 only, 2/v2=v2 only, 3/hybrid=v1+v2)",
+          "enum": ["1", "2", "3", "v1", "v2", "hybrid"]
         }
       }
     },
@@ -123,15 +128,20 @@
             "type": "array",
             "description": "List of glob patterns to exclude files (e.g., \"*.nfo\", \"*sample*\")",
             "items": {
-            "type": "string"
-          }
-        },
-        "include_patterns": {
-          "type": "array",
-          "description": "List of glob patterns to include files (e.g., \"*.mkv\", \"*video*\")",
-          "items": {
-            "type": "string"
+              "type": "string"
             }
+          },
+          "include_patterns": {
+            "type": "array",
+            "description": "List of glob patterns to include files (e.g., \"*.mkv\", \"*video*\")",
+            "items": {
+              "type": "string"
+            }
+          },
+          "format": {
+            "type": "string",
+            "description": "BitTorrent format version (1/v1=v1 only, 2/v2=v2 only, 3/hybrid=v1+v2)",
+            "enum": ["1", "2", "3", "v1", "v2", "hybrid"]
           }
         }
       }

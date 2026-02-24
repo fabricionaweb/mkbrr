@@ -33,6 +33,7 @@ type BatchJob struct {
 	NoDate              bool     `yaml:"no_date"`
 	SkipPrefix          bool     `yaml:"skip_prefix"`
 	FailOnSeasonWarning bool     `yaml:"fail_on_season_warning"`
+	Format              string   `yaml:"format"`
 }
 
 // ToCreateOptions converts a BatchJob to CreateOptions
@@ -59,6 +60,14 @@ func (j *BatchJob) ToCreateOptions(verbose bool, quiet bool, infoOnly bool, vers
 	if j.PieceLength != 0 {
 		pieceLen := j.PieceLength
 		opts.PieceLengthExp = &pieceLen
+	}
+
+	// Parse and set format (defaults to v1 if not specified or invalid)
+	if j.Format != "" {
+		format, err := ParseFormat(j.Format)
+		if err == nil {
+			opts.Format = format
+		}
 	}
 
 	return opts

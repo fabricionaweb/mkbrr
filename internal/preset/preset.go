@@ -38,6 +38,7 @@ type Options struct {
 	PieceLength         uint     `yaml:"piece_length"`
 	MaxPieceLength      uint     `yaml:"max_piece_length"`
 	Workers             int      `yaml:"workers"`
+	Format              string   `yaml:"format"`
 }
 
 // FindPresetFile searches for a preset file in known locations
@@ -136,6 +137,7 @@ func (c *Config) GetPreset(name string) (*Options, error) {
 		merged.PieceLength = c.Default.PieceLength
 		merged.MaxPieceLength = c.Default.MaxPieceLength
 		merged.Workers = c.Default.Workers
+		merged.Format = c.Default.Format
 		if len(c.Default.ExcludePatterns) > 0 {
 			merged.ExcludePatterns = c.Default.ExcludePatterns
 		}
@@ -192,6 +194,9 @@ func (c *Config) GetPreset(name string) (*Options, error) {
 	}
 	if preset.Workers != 0 {
 		merged.Workers = preset.Workers
+	}
+	if preset.Format != "" {
+		merged.Format = preset.Format
 	}
 	if preset.FailOnSeasonWarning != nil {
 		merged.FailOnSeasonWarning = preset.FailOnSeasonWarning

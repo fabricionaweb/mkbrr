@@ -78,6 +78,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "format": {
+            "type": "string",
+            "description": "BitTorrent format version (1/v1=v1 only, 2/v2=v2 only, 3/hybrid=v1+v2)",
+            "enum": ["1", "2", "3", "v1", "v2", "hybrid"]
           }
         }
       }

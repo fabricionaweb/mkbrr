@@ -122,6 +122,23 @@ func generateRandomString() (string, error) {
 // Returns a Torrent struct containing the metainfo.
 // This is the lower-level function; use Create() for a higher-level interface.
 func CreateTorrent(opts CreateOptions) (*Torrent, error) {
+	// Route to appropriate creation function based on format
+	// Default (0) or FormatV1 (1) uses v1 format
+	// FormatV2 (2) and FormatHybrid (3) will be implemented in later phases
+	switch opts.Format {
+	case 0, FormatV1:
+		return createV1(opts)
+	case FormatV2:
+		return nil, fmt.Errorf("BitTorrent v2 format is not yet implemented")
+	case FormatHybrid:
+		return nil, fmt.Errorf("BitTorrent hybrid format is not yet implemented")
+	default:
+		return nil, fmt.Errorf("invalid format version: %d (expected 1, 2, or 3)", opts.Format)
+	}
+}
+
+// createV1 creates a v1-only torrent (original implementation)
+func createV1(opts CreateOptions) (*Torrent, error) {
 	path := filepath.ToSlash(opts.Path)
 	name := opts.Name
 	if name == "" {
