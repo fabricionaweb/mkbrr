@@ -36,8 +36,8 @@
         },
         "piece_length": {
           "type": "integer",
-          "description": "Piece length as 2^n bytes (16-27)",
-          "minimum": 16,
+          "description": "Piece length as 2^n bytes (14-27)",
+          "minimum": 14,
           "maximum": 27
         },
         "comment": {
