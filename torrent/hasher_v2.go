@@ -15,6 +15,20 @@ import (
 	"github.com/anacrolix/torrent/merkle"
 )
 
+const (
+	// File size thresholds for worker optimization
+	minParallelFileSize = 100 << 20 // 100 MB: threshold for parallel block hashing
+	tinyFileSize        = 1 << 20   // 1 MB: tiny file threshold for single worker
+	smallFileSize       = 10 << 20  // 10 MB: small file threshold for limited workers
+
+	// Buffer and chunk sizes for I/O optimization
+	readBufferSize  = 4 << 20   // 4 MB: buffered reader size per file handle
+	targetChunkSize = 256 << 20 // 256 MB: target chunk size for parallel workers
+
+	// Timing for progress updates
+	progressUpdateInterval = 200 * time.Millisecond
+)
+
 // fileHasher handles parallel hashing of files for v2 format
 type fileHasher struct {
 	files               []fileEntry
@@ -106,7 +120,16 @@ func (h *fileHasher) hashFiles() error {
 		},
 	}
 
-	h.display.ShowFiles(h.files, numWorkers)
+	// Check if any files will use parallel block hashing
+	blockWorkers := 0
+	for _, f := range h.files {
+		if f.length >= minParallelFileSize {
+			blockWorkers = runtime.NumCPU()
+			break
+		}
+	}
+
+	h.display.ShowFiles(h.files, numWorkers, blockWorkers)
 	seasonInfo := AnalyzeSeasonPack(h.files)
 	h.display.ShowSeasonPackWarnings(seasonInfo)
 	if seasonInfo.IsSuspicious && h.failOnSeasonWarning {
@@ -150,7 +173,7 @@ func (h *fileHasher) hashFiles() error {
 				break
 			}
 			tracker.Update(int(totalBlocks))
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(progressUpdateInterval)
 		}
 	}()
 
@@ -198,11 +221,11 @@ func (h *fileHasher) optimizeWorkers() int {
 	avgFileSize := totalSize / int64(len(h.files))
 	switch {
 	case len(h.files) == 1:
-		if totalSize < 1<<20 {
+		if totalSize < tinyFileSize {
 			return 1
 		}
 		return runtime.NumCPU()
-	case avgFileSize < 10<<20:
+	case avgFileSize < smallFileSize:
 		return min(runtime.NumCPU(), len(h.files))
 	default:
 		return min(runtime.NumCPU()*2, len(h.files))
@@ -244,8 +267,7 @@ func (h *fileHasher) hashFile(fileIdx int, tracker *progressTracker) error {
 	}
 
 	// For multi-piece files, choose based on size
-	const minParallelSize = 100 << 20 // 100 MB threshold
-	if file.length >= minParallelSize {
+	if file.length >= minParallelFileSize {
 		// Parallel path opens its own file handles per worker
 		return h.hashFileParallel(file, numPieces, tracker, &result, fileIdx)
 	}
@@ -262,7 +284,7 @@ func (h *fileHasher) hashFileSinglePiece(file fileEntry, tracker *progressTracke
 	}
 	defer f.Close()
 
-	reader := bufio.NewReaderSize(f, 4<<20) // 4MB buffer
+	reader := bufio.NewReaderSize(f, readBufferSize)
 	buf := h.bufferPool.Get().([]byte)
 	defer h.bufferPool.Put(buf)
 
@@ -296,7 +318,7 @@ func (h *fileHasher) hashFileSequential(file fileEntry, numPieces int, tracker *
 	}
 	defer f.Close()
 
-	reader := bufio.NewReaderSize(f, 4<<20) // 4MB buffer
+	reader := bufio.NewReaderSize(f, readBufferSize)
 	buf := h.bufferPool.Get().([]byte)
 	defer h.bufferPool.Put(buf)
 
@@ -356,10 +378,10 @@ func (h *fileHasher) hashFileParallel(file fileEntry, numPieces int, tracker *pr
 	blocksPerPiece := int(h.pieceLength / blockSize)
 	numBlocks := int((file.length + blockSize - 1) / blockSize)
 
-	const targetChunkSize = 256 << 20
 	pieceSize := int64(blocksPerPiece * blockSize)
 
 	numWorkers := runtime.NumCPU()
+
 	chunkPieces := int((targetChunkSize + pieceSize - 1) / pieceSize)
 	if chunkPieces < 1 {
 		chunkPieces = 1
@@ -447,7 +469,7 @@ func (h *fileHasher) hashChunk(filePath string, startOffset, endOffset int64) ([
 	}
 
 	const blockSize = merkle.BlockSize
-	reader := bufio.NewReaderSize(f, 4<<20) // // 4MB buffer: balances syscall reduction with per-worker memory (4MB × numWorkers total)
+	reader := bufio.NewReaderSize(f, readBufferSize)
 	buf := make([]byte, blockSize)
 
 	numBlocks := int((endOffset - startOffset + blockSize - 1) / blockSize)

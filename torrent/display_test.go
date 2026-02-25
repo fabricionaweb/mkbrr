@@ -75,7 +75,7 @@ func TestShowFiles_WithSubdirectories(t *testing.T) {
 			display := NewDisplay(formatter)
 			display.output = &buf
 
-			display.ShowFiles(tc.files, 4)
+			display.ShowFiles(tc.files, 4, 0)
 
 			output := buf.String()
 
@@ -96,7 +96,7 @@ func TestShowFiles_EmptyFiles(t *testing.T) {
 	display := NewDisplay(formatter)
 	display.output = &buf
 
-	display.ShowFiles([]fileEntry{}, 4)
+	display.ShowFiles([]fileEntry{}, 4, 0)
 
 	output := buf.String()
 	assert.Contains(t, output, "Using 4 worker(s)")
@@ -114,7 +114,7 @@ func TestShowFiles_QuietMode(t *testing.T) {
 		{path: filepath.Join("/test", "file.mkv"), length: 100 * 1024 * 1024},
 	}
 
-	display.ShowFiles(files, 4)
+	display.ShowFiles(files, 4, 0)
 
 	output := buf.String()
 	assert.Empty(t, output, "No output should be produced in quiet mode")

@@ -4,7 +4,7 @@ package torrent
 type Displayer interface {
 	ShowProgress(total int)
 	UpdateProgress(completed int, hashrate float64)
-	ShowFiles(files []fileEntry, numWorkers int)
+	ShowFiles(files []fileEntry, numWorkers, blockWorkers int)
 	ShowSeasonPackWarnings(info *SeasonPackInfo)
 	FinishProgress()
 	IsBatch() bool

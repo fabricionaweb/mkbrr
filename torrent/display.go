@@ -82,14 +82,19 @@ func (d *Display) UpdateProgress(completed int, hashrate float64) {
 }
 
 // ShowFiles displays the list of files being processed and the number of workers used.
-func (d *Display) ShowFiles(files []fileEntry, numWorkers int) {
+func (d *Display) ShowFiles(files []fileEntry, numWorkers, blockWorkers int) {
 	if d.quiet {
 		return
 	}
 
-	workerMsg := fmt.Sprintf("Using %d worker(s)", numWorkers)
+	var workerMsg string
 	if numWorkers == 0 {
 		workerMsg = "Using automatic worker count"
+	} else if len(files) == 1 && blockWorkers > 0 {
+		// v2 large file only
+		workerMsg = fmt.Sprintf("Using 1 file worker + %d block workers", blockWorkers)
+	} else {
+		workerMsg = fmt.Sprintf("Using %d worker(s)", numWorkers)
 	}
 	fmt.Fprintf(d.output, "\n%s %s\n", label("Concurrency:"), workerMsg)
 

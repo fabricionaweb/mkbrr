@@ -138,7 +138,7 @@ func (c *callbackDisplayer) UpdateProgress(completed int, hashrate float64) {
 }
 
 // ShowFiles implements Displayer interface (no-op for callback)
-func (c *callbackDisplayer) ShowFiles(files []fileEntry, numWorkers int) {}
+func (c *callbackDisplayer) ShowFiles(files []fileEntry, numWorkers, blockWorkers int) {}
 
 // ShowSeasonPackWarnings implements Displayer interface (no-op for callback)
 func (c *callbackDisplayer) ShowSeasonPackWarnings(info *SeasonPackInfo) {}
