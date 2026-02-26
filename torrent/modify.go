@@ -95,11 +95,12 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 	// apply preset modifications if any
 	wasModified := false
 	if presetOpts != nil {
-		wasModified, err = presetOpts.ApplyToMetaInfo(mi)
+		modified, err := presetOpts.ApplyToMetaInfo(mi)
 		if err != nil {
 			result.Error = fmt.Errorf("could not apply preset: %w", err)
 			return result, result.Error
 		}
+		wasModified = modified
 	}
 
 	// apply flag-based overrides:
@@ -111,20 +112,26 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 			announceList[i] = []string{tracker}
 		}
 		mi.AnnounceList = announceList
-		wasModified = true
+		if !wasModified {
+			wasModified = true
+		}
 		// Note: This overrides any trackers set by a preset
 	}
 
 	// update web seeds if provided via flag
 	if len(opts.WebSeeds) > 0 {
 		mi.UrlList = opts.WebSeeds
-		wasModified = true
+		if !wasModified {
+			wasModified = true
+		}
 	}
 
 	// update comment if provided via flag
 	if opts.Comment != "" && mi.Comment != opts.Comment {
 		mi.Comment = opts.Comment
-		wasModified = true
+		if !wasModified {
+			wasModified = true
+		}
 	}
 
 	// update private flag if provided via flag
@@ -137,7 +144,9 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 				if infoBytes, err := bencode.Marshal(info); err == nil {
 					mi.InfoBytes = infoBytes
 				}
-				wasModified = true
+				if !wasModified {
+					wasModified = true
+				}
 			}
 		}
 	}
@@ -151,7 +160,9 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 				if infoBytes, err := bencode.Marshal(info); err == nil {
 					mi.InfoBytes = infoBytes
 				}
-				wasModified = true
+				if !wasModified {
+					wasModified = true
+				}
 			}
 		}
 	}
@@ -164,7 +175,9 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 				infoMap["entropy"] = entropy
 				if infoBytes, err := bencode.Marshal(infoMap); err == nil {
 					mi.InfoBytes = infoBytes
-					wasModified = true
+					if !wasModified {
+						wasModified = true
+					}
 				}
 			}
 		}
@@ -173,16 +186,22 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 	// handle creator
 	if presetOpts != nil && presetOpts.NoCreator != nil && *presetOpts.NoCreator || opts.NoCreator {
 		mi.CreatedBy = ""
-		wasModified = true
+		if !wasModified {
+			wasModified = true
+		}
 	}
 
 	// update creation date based on preset and command line options
 	if presetOpts != nil && presetOpts.NoDate != nil && *presetOpts.NoDate || opts.NoDate {
 		mi.CreationDate = 0
-		wasModified = true
+		if !wasModified {
+			wasModified = true
+		}
 	} else {
 		mi.CreationDate = time.Now().Unix()
-		wasModified = true
+		if !wasModified {
+			wasModified = true
+		}
 	}
 
 	if !wasModified {
