@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/fatih/color"
 	progressbar "github.com/schollz/progressbar/v3"
@@ -256,7 +257,15 @@ func (d *Display) ShowWarning(msg string) {
 func (d *Display) ShowTorrentInfo(t *Torrent, info *metainfo.Info) {
 	fmt.Fprintf(d.output, "\n%s\n", magenta("Torrent info:"))
 	fmt.Fprintf(d.output, "  %-13s %s\n", label("Name:"), info.Name)
-	fmt.Fprintf(d.output, "  %-13s %s\n", label("Hash:"), t.HashInfoBytes())
+	// For pure v2 torrents, show SHA-256 hash; for v1/hybrid, show SHA-1
+	var hashStr string
+	if info.MetaVersion == 2 && !info.HasV1() {
+		v2Hash := infohash_v2.HashBytes(t.InfoBytes)
+		hashStr = v2Hash.String()
+	} else {
+		hashStr = t.HashInfoBytes().String()
+	}
+	fmt.Fprintf(d.output, "  %-13s %s\n", label("Hash:"), hashStr)
 	fmt.Fprintf(d.output, "  %-13s %s\n", label("Size:"), d.formatter.FormatBytes(info.TotalLength()))
 	fmt.Fprintf(d.output, "  %-13s %s\n", label("Piece length:"), d.formatter.FormatBytes(info.PieceLength))
 	fmt.Fprintf(d.output, "  %-13s %d\n", label("Pieces:"), len(info.Pieces)/20)

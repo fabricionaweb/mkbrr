@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/merkle"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 const (
@@ -339,7 +340,7 @@ func (h *fileHasher) hashFileSequential(file fileEntry, numPieces int, tracker *
 			blockHashes = append(blockHashes, blockHash)
 
 			if len(blockHashes) == blocksPerPiece {
-				pieceRoot := merkle.RootWithPadHash(blockHashes, [32]byte{})
+				pieceRoot := merkle.RootWithPadHash(blockHashes, metainfo.HashForPiecePad(h.pieceLength))
 				pieceRoots = append(pieceRoots, pieceRoot)
 				blockHashes = blockHashes[:0]
 			}
@@ -355,12 +356,14 @@ func (h *fileHasher) hashFileSequential(file fileEntry, numPieces int, tracker *
 	}
 
 	if len(blockHashes) > 0 {
-		pieceRoot := merkle.RootWithPadHash(blockHashes, [32]byte{})
+		pieceRoot := merkle.RootWithPadHash(blockHashes, metainfo.HashForPiecePad(h.pieceLength))
 		pieceRoots = append(pieceRoots, pieceRoot)
 	}
 
-	// Compute piecesRoot from all block hashes
-	result.piecesRoot = merkle.RootWithPadHash(allBlocks, [32]byte{})
+	// Compute piecesRoot from piece roots (not block hashes) per BEP 52
+	// The piecesRoot is the merkle root of all piece hashes
+	piecePadHash := metainfo.HashForPiecePad(h.pieceLength)
+	result.piecesRoot = merkle.RootWithPadHash(pieceRoots, piecePadHash)
 
 	var layers strings.Builder
 	layers.Grow(len(pieceRoots) * 32)
@@ -434,13 +437,21 @@ func (h *fileHasher) hashFileParallel(file fileEntry, numPieces int, tracker *pr
 		allBlocks = append(allBlocks, blocks...)
 	}
 
-	result.piecesRoot = merkle.RootWithPadHash(allBlocks, [32]byte{})
+	// Validate that we hashed the expected number of blocks
+	if len(allBlocks) != numBlocks {
+		return fmt.Errorf("block count mismatch for %s: expected %d blocks, got %d", file.path, numBlocks, len(allBlocks))
+	}
 
+	// Compute piece roots from block hashes for each piece
+	piecePadHash := metainfo.HashForPiecePad(h.pieceLength)
 	pieceRoots := make([][32]byte, 0, numPieces)
 	for i := 0; i < len(allBlocks); i += blocksPerPiece {
 		end := min(i+blocksPerPiece, len(allBlocks))
-		pieceRoots = append(pieceRoots, merkle.RootWithPadHash(allBlocks[i:end], [32]byte{}))
+		pieceRoots = append(pieceRoots, merkle.RootWithPadHash(allBlocks[i:end], piecePadHash))
 	}
+
+	// Compute piecesRoot from piece roots (not block hashes) per BEP 52
+	result.piecesRoot = merkle.RootWithPadHash(pieceRoots, piecePadHash)
 
 	if len(pieceRoots) > 1 {
 		var layers strings.Builder
@@ -493,10 +504,18 @@ func (h *fileHasher) hashChunk(filePath string, startOffset, endOffset int64) ([
 
 		if err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
+				// Premature EOF - we expected more data but hit end of file
+				// This indicates file truncation or corruption
+				return nil, 0, fmt.Errorf("unexpected EOF while reading %s at offset %d: expected %d more bytes, got %d", filePath, endOffset-remaining, endOffset-startOffset-bytesRead, bytesRead)
 			}
 			return nil, 0, err
 		}
+	}
+
+	// Validate that we read the expected amount of data
+	expectedBytes := endOffset - startOffset
+	if bytesRead != expectedBytes {
+		return nil, 0, fmt.Errorf("incomplete read of %s: expected %d bytes, got %d", filePath, expectedBytes, bytesRead)
 	}
 
 	return blocks, bytesRead, nil

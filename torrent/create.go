@@ -11,6 +11,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"github.com/fatih/color"
 
 	"github.com/autobrr/mkbrr/internal/preset"
@@ -540,10 +541,19 @@ func Create(opts CreateOptions) (*TorrentInfo, error) {
 	info := t.GetInfo()
 
 	// create torrent info for return
+	// For pure v2 torrents, use SHA-256 hash; for v1/hybrid, use SHA-1
+	var infoHashStr string
+	if info.MetaVersion == 2 && !info.HasV1() {
+		v2Hash := infohash_v2.HashBytes(t.MetaInfo.InfoBytes)
+		infoHashStr = v2Hash.String()
+	} else {
+		infoHashStr = t.MetaInfo.HashInfoBytes().String()
+	}
+
 	torrentInfo := &TorrentInfo{
 		Path:     opts.OutputPath,
 		Size:     info.Length,
-		InfoHash: t.MetaInfo.HashInfoBytes().String(),
+		InfoHash: infoHashStr,
 		Files:    len(info.Files),
 		Announce: func() string {
 			if len(opts.TrackerURLs) > 0 {

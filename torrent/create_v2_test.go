@@ -76,13 +76,19 @@ func TestCreateV2_TorrentStructure(t *testing.T) {
 	}
 
 	// Check PiecesRoot is set in FileTree
-	if info.FileTree.File.PiecesRoot == "" {
+	// Note: anacrolix normalizes the BEP 52 {"": {...}} structure to File field
+	filename := filepath.Base(testFile)
+	if _, ok := info.FileTree.Dir[filename]; !ok {
+		t.Fatalf("v2 single file torrent should have filename %q as key in FileTree.Dir", filename)
+	}
+	fileEntry := info.FileTree.Dir[filename]
+	if fileEntry.File.PiecesRoot == "" {
 		t.Error("v2 single file torrent should have PiecesRoot in FileTree")
 	}
 
 	// Check Length matches
-	if info.FileTree.File.Length != int64(len(content)) {
-		t.Errorf("FileTree.File.Length = %d, want %d", info.FileTree.File.Length, len(content))
+	if fileEntry.File.Length != int64(len(content)) {
+		t.Errorf("FileTree.Dir[%q].File.Length = %d, want %d", filename, fileEntry.File.Length, len(content))
 	}
 }
 
@@ -218,12 +224,18 @@ func TestCreateV2_LargeFile(t *testing.T) {
 	}
 
 	// Verify the file has correct length
-	if info.FileTree.File.Length != int64(len(content)) {
-		t.Errorf("FileTree.File.Length = %d, want %d", info.FileTree.File.Length, len(content))
+	// Note: anacrolix normalizes the BEP 52 {"": {...}} structure to File field
+	filename := filepath.Base(testFile)
+	if _, ok := info.FileTree.Dir[filename]; !ok {
+		t.Fatalf("v2 single file torrent should have filename %q as key in FileTree.Dir", filename)
+	}
+	fileEntry := info.FileTree.Dir[filename]
+	if fileEntry.File.Length != int64(len(content)) {
+		t.Errorf("FileTree.Dir[%q].File.Length = %d, want %d", filename, fileEntry.File.Length, len(content))
 	}
 
 	// Check PiecesRoot is set
-	if info.FileTree.File.PiecesRoot == "" {
+	if fileEntry.File.PiecesRoot == "" {
 		t.Error("Large file should have PiecesRoot")
 	}
 }

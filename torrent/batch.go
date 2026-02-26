@@ -8,6 +8,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
+
 	"github.com/autobrr/mkbrr/internal/preset"
 )
 
@@ -213,10 +215,18 @@ func processJob(job BatchJob, verbose bool, quiet bool, infoOnly bool, version s
 	// collect torrent info
 	info := mi.GetInfo()
 	result.Success = true
+	// For pure v2 torrents, use SHA-256 hash; for v1/hybrid, use SHA-1
+	var infoHashStr string
+	if info.MetaVersion == 2 && !info.HasV1() {
+		v2Hash := infohash_v2.HashBytes(mi.InfoBytes)
+		infoHashStr = v2Hash.String()
+	} else {
+		infoHashStr = mi.HashInfoBytes().String()
+	}
 	result.Info = &TorrentInfo{
 		Path:     output,
 		Size:     info.TotalLength(),
-		InfoHash: mi.HashInfoBytes().String(),
+		InfoHash: infoHashStr,
 		Files:    len(info.Files),
 	}
 

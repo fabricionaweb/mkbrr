@@ -296,15 +296,9 @@ func calculatePieceLengthV2(totalSize int64, maxPieceLength *uint) uint {
 
 // buildFileTree builds the FileTree structure from file results
 func buildFileTree(files []fileEntry, results []fileHash, baseDir string, originalPaths map[string]string) metainfo.FileTree {
-	if len(files) == 1 && baseDir == "" {
-		return metainfo.FileTree{
-			File: metainfo.FileTreeFile{
-				Length:     results[0].length,
-				PiecesRoot: string(results[0].piecesRoot[:]),
-			},
-		}
-	}
-
+	// Always build as directory structure per BEP 52
+	// Single file: {filename: {"": {length, pieces root}}}
+	// Multi-file: {dir: {filename: {"": {length, pieces root}}}}
 	root := metainfo.FileTree{
 		Dir: make(map[string]metainfo.FileTree),
 	}
@@ -316,13 +310,19 @@ func buildFileTree(files []fileEntry, results []fileHash, baseDir string, origin
 			originalPath = f.path
 		}
 
-		relPath, err := filepath.Rel(baseDir, originalPath)
-		if err != nil {
-			relPath = originalPath
+		var parts []string
+		if baseDir == "" {
+			// Single file: just use the filename
+			parts = []string{filepath.Base(originalPath)}
+		} else {
+			// Multi-file: use relative path from baseDir
+			relPath, err := filepath.Rel(baseDir, originalPath)
+			if err != nil {
+				relPath = originalPath
+			}
+			relPath = filepath.ToSlash(relPath)
+			parts = splitPath(relPath)
 		}
-
-		relPath = filepath.ToSlash(relPath)
-		parts := splitPath(relPath)
 
 		insertIntoFileTree(&root, parts, results[i])
 	}
@@ -337,6 +337,9 @@ func insertIntoFileTree(tree *metainfo.FileTree, pathParts []string, result file
 	}
 
 	if len(pathParts) == 1 {
+		// BEP 52: file properties go under empty string key
+		// anacrolix FileTree.MarshalBencode handles this automatically:
+		// when File is set (not Dir), it marshals as {"": {length, pieces root}}
 		tree.Dir[pathParts[0]] = metainfo.FileTree{
 			File: metainfo.FileTreeFile{
 				Length:     result.length,
