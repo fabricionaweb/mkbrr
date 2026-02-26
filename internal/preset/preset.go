@@ -207,12 +207,22 @@ func (c *Config) GetPreset(name string) (*Options, error) {
 
 // ApplyToMetaInfo applies preset options to a MetaInfo object
 func (o *Options) ApplyToMetaInfo(mi *metainfo.MetaInfo) (bool, error) {
-	wasModified := false
-
 	info, err := mi.UnmarshalInfo()
 	if err != nil {
 		return false, fmt.Errorf("could not unmarshal info: %w", err)
 	}
+
+	// Route v2-only torrents to map-based handler to preserve FileTree
+	if info.MetaVersion == 2 && !info.HasV1() {
+		return o.ApplyToMetaInfoV2(mi)
+	}
+
+	return o.applyToMetaInfoV1(mi, &info)
+}
+
+// applyToMetaInfoV1 applies preset options to v1 torrents using struct-based manipulation
+func (o *Options) applyToMetaInfoV1(mi *metainfo.MetaInfo, info *metainfo.Info) (bool, error) {
+	wasModified := false
 
 	// Only modify values that are explicitly set in the preset
 	if len(o.Trackers) > 0 {
@@ -270,6 +280,114 @@ func (o *Options) ApplyToMetaInfo(mi *metainfo.MetaInfo) (bool, error) {
 	if wasModified {
 		if infoBytes, err := bencode.Marshal(info); err == nil {
 			mi.InfoBytes = infoBytes
+		}
+	}
+
+	return wasModified, nil
+}
+
+// ApplyToMetaInfoV2 applies preset options to v2-only torrents using map-based manipulation
+// to preserve FileTree structure
+func (o *Options) ApplyToMetaInfoV2(mi *metainfo.MetaInfo) (bool, error) {
+	wasModified := false
+
+	// Unmarshal to map to preserve FileTree structure
+	infoMap := make(map[string]interface{})
+	if err := bencode.Unmarshal(mi.InfoBytes, &infoMap); err != nil {
+		return false, fmt.Errorf("could not unmarshal info dict: %w", err)
+	}
+
+	needsRemarshal := false
+
+	// Only modify values that are explicitly set in the preset
+	if len(o.Trackers) > 0 {
+		mi.Announce = o.Trackers[0]
+		announceList := make([][]string, len(o.Trackers))
+		for i, tracker := range o.Trackers {
+			announceList[i] = []string{tracker}
+		}
+		mi.AnnounceList = announceList
+		wasModified = true
+	}
+
+	if len(o.WebSeeds) > 0 {
+		mi.UrlList = o.WebSeeds
+		wasModified = true
+	}
+
+	if o.Source != "" {
+		currentSource, _ := infoMap["source"].(string)
+		if currentSource != o.Source {
+			infoMap["source"] = o.Source
+			needsRemarshal = true
+			wasModified = true
+		}
+	}
+
+	if o.Comment != "" {
+		if mi.Comment != o.Comment {
+			mi.Comment = o.Comment
+			wasModified = true
+		}
+	}
+
+	if o.Private != nil {
+		currentPrivate, hasPrivate := infoMap["private"]
+		needsUpdate := false
+
+		if !hasPrivate {
+			needsUpdate = true
+		} else {
+			// Check if current value differs
+			if currentVal, ok := currentPrivate.(int64); ok {
+				if (*o.Private && currentVal != 1) || (!*o.Private && currentVal != 0) {
+					needsUpdate = true
+				}
+			} else if currentVal, ok := currentPrivate.(int); ok {
+				if (*o.Private && currentVal != 1) || (!*o.Private && currentVal != 0) {
+					needsUpdate = true
+				}
+			} else {
+				// Type mismatch, update anyway
+				needsUpdate = true
+			}
+		}
+
+		if needsUpdate {
+			if *o.Private {
+				infoMap["private"] = int64(1)
+			} else {
+				infoMap["private"] = int64(0)
+			}
+			needsRemarshal = true
+			wasModified = true
+		}
+	}
+
+	if o.NoCreator != nil {
+		if *o.NoCreator {
+			mi.CreatedBy = ""
+		} else {
+			mi.CreatedBy = fmt.Sprintf("mkbrr/%s", o.Version)
+		}
+		wasModified = true
+	}
+
+	if o.NoDate != nil {
+		if *o.NoDate {
+			mi.CreationDate = 0
+		} else {
+			mi.CreationDate = time.Now().Unix()
+		}
+		wasModified = true
+	}
+
+	// Re-marshal the modified info if needed
+	if needsRemarshal {
+		if infoBytes, err := bencode.Marshal(infoMap); err == nil {
+			mi.InfoBytes = infoBytes
+		} else {
+			return false, fmt.Errorf("could not marshal modified info dict: %w", err)
 		}
 	}
 

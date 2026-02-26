@@ -103,7 +103,90 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 		wasModified = modified
 	}
 
-	// apply flag-based overrides:
+	// Check if this is a v2-only torrent and route to appropriate handler
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		result.Error = fmt.Errorf("could not unmarshal info: %w", err)
+		return result, result.Error
+	}
+
+	if info.MetaVersion == 2 && !info.HasV1() {
+		// For v2 torrents, use map-based manipulation to preserve FileTree
+		modified, err := modifyTorrentV2(mi, opts) // preset already applied above
+		if err != nil {
+			result.Error = err
+			return result, result.Error
+		}
+		wasModified = modified || wasModified
+	} else {
+		// For v1 torrents, use existing struct-based modifications
+		modified := modifyTorrentV1(mi, opts, nil, wasModified) // preset already applied above
+		wasModified = modified
+	}
+
+	if !wasModified {
+		return result, nil
+	}
+
+	if opts.DryRun {
+		result.WasModified = true
+		return result, nil
+	}
+
+	var metaInfoName string
+	info, _ = mi.UnmarshalInfo()
+	metaInfoName = info.Name
+
+	basePath := path
+	if opts.OutputPattern == "" && metaInfoName != "" {
+		basePath = metaInfoName + ".torrent"
+	}
+
+	// determine output directory: command-line flag takes precedence over preset
+	outputDir := opts.OutputDir
+	if outputDir == "" && presetOpts != nil && presetOpts.OutputDir != "" {
+		outputDir = presetOpts.OutputDir
+	}
+
+	// generate output path using the preset generating helper
+	var trackerForOutput string
+	if len(opts.TrackerURLs) > 0 {
+		trackerForOutput = opts.TrackerURLs[0]
+	} else {
+		trackerForOutput = ""
+	}
+	outPath := preset.GenerateOutputPath(basePath, outputDir, opts.PresetName, opts.OutputPattern, trackerForOutput, metaInfoName, opts.SkipPrefix)
+	result.OutputPath = outPath
+
+	// ensure output directory exists if specified
+	if outputDir != "" {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			result.Error = fmt.Errorf("could not create output directory: %w", err)
+			return result, result.Error
+		}
+	}
+
+	// save modified torrent file
+	f, err := os.Create(outPath)
+	if err != nil {
+		result.Error = fmt.Errorf("could not create output file: %w", err)
+		return result, result.Error
+	}
+	defer f.Close()
+
+	if err := mi.Write(f); err != nil {
+		result.Error = fmt.Errorf("could not write output file: %w", err)
+		return result, result.Error
+	}
+
+	result.WasModified = true
+	return result, nil
+}
+
+// modifyTorrentV1 applies flag-based modifications to v1 torrents using struct-based manipulation
+func modifyTorrentV1(mi *metainfo.MetaInfo, opts ModifyOptions, presetOpts *preset.Options, alreadyModified bool) bool {
+	wasModified := alreadyModified
+
 	// update tracker if flag provided
 	if len(opts.TrackerURLs) > 0 {
 		mi.Announce = opts.TrackerURLs[0] // Primary announce is the first one
@@ -204,65 +287,7 @@ func ModifyTorrent(path string, opts ModifyOptions) (*Result, error) {
 		}
 	}
 
-	if !wasModified {
-		return result, nil
-	}
-
-	if opts.DryRun {
-		result.WasModified = true
-		return result, nil
-	}
-
-	var metaInfoName string
-	info, err := mi.UnmarshalInfo()
-	if err == nil {
-		metaInfoName = info.Name
-	}
-
-	basePath := path
-	if opts.OutputPattern == "" && metaInfoName != "" {
-		basePath = metaInfoName + ".torrent"
-	}
-
-	// determine output directory: command-line flag takes precedence over preset
-	outputDir := opts.OutputDir
-	if outputDir == "" && presetOpts != nil && presetOpts.OutputDir != "" {
-		outputDir = presetOpts.OutputDir
-	}
-
-	// generate output path using the preset generating helper
-	var trackerForOutput string
-	if len(opts.TrackerURLs) > 0 {
-		trackerForOutput = opts.TrackerURLs[0]
-	} else {
-		trackerForOutput = ""
-	}
-	outPath := preset.GenerateOutputPath(basePath, outputDir, opts.PresetName, opts.OutputPattern, trackerForOutput, metaInfoName, opts.SkipPrefix)
-	result.OutputPath = outPath
-
-	// ensure output directory exists if specified
-	if outputDir != "" {
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			result.Error = fmt.Errorf("could not create output directory: %w", err)
-			return result, result.Error
-		}
-	}
-
-	// save modified torrent file
-	f, err := os.Create(outPath)
-	if err != nil {
-		result.Error = fmt.Errorf("could not create output file: %w", err)
-		return result, result.Error
-	}
-	defer f.Close()
-
-	if err := mi.Write(f); err != nil {
-		result.Error = fmt.Errorf("could not write output file: %w", err)
-		return result, result.Error
-	}
-
-	result.WasModified = true
-	return result, nil
+	return wasModified
 }
 
 // ProcessTorrents modifies multiple torrent files according to the given options.

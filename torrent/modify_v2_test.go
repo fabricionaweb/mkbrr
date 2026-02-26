@@ -101,6 +101,14 @@ func TestModifyTorrentV2_PreservesPieceLayers(t *testing.T) {
 	if info.MetaVersion != 2 {
 		t.Errorf("MetaVersion = %d, want 2", info.MetaVersion)
 	}
+
+	// Verify FileTree is preserved by checking it still has the file
+	if info.FileTree.Dir == nil {
+		t.Fatal("FileTree.Dir is nil after modification")
+	}
+	if _, ok := info.FileTree.Dir["large.bin"]; !ok {
+		t.Fatal("large.bin not found in FileTree after modification")
+	}
 }
 
 // TestModifyTorrentV2_Entropy tests that entropy can be added to v2 torrents
@@ -176,6 +184,14 @@ func TestModifyTorrentV2_Entropy(t *testing.T) {
 	if info.MetaVersion != 2 {
 		t.Errorf("MetaVersion = %d, want 2", info.MetaVersion)
 	}
+
+	// Verify FileTree is preserved
+	if info.FileTree.Dir == nil {
+		t.Fatal("FileTree.Dir is nil after modification")
+	}
+	if _, ok := info.FileTree.Dir["test.txt"]; !ok {
+		t.Fatal("test.txt not found in FileTree after modification")
+	}
 }
 
 // TestModifyTorrentV2_UpdatePrivate tests updating private flag on v2 torrents
@@ -232,7 +248,221 @@ func TestModifyTorrentV2_UpdatePrivate(t *testing.T) {
 		t.Fatalf("Modified torrent file doesn't exist: %v", err)
 	}
 
-	// Note: We can't verify the private flag was set because re-marshaling v2
-	// info dicts corrupts the FileTree structure. This is a known limitation.
-	// The modification was still attempted (WasModified = true).
+	// Load modified torrent and verify private flag is set
+	modifiedMi, err := metainfo.LoadFromFile(result.OutputPath)
+	if err != nil {
+		t.Fatalf("Failed to load modified torrent: %v", err)
+	}
+
+	var infoMap map[string]interface{}
+	if err := bencode.Unmarshal(modifiedMi.InfoBytes, &infoMap); err != nil {
+		t.Fatalf("Failed to unmarshal info: %v", err)
+	}
+
+	privateVal, ok := infoMap["private"]
+	if !ok {
+		t.Fatal("Private field not found in info dictionary")
+	}
+
+	// Check that private is set to 1
+	if val, ok := privateVal.(int64); !ok || val != 1 {
+		t.Errorf("Private = %v, want 1", privateVal)
+	}
+
+	// Verify FileTree is preserved
+	info, err := modifiedMi.UnmarshalInfo()
+	if err != nil {
+		t.Fatalf("Failed to unmarshal info: %v", err)
+	}
+
+	if info.FileTree.Dir == nil {
+		t.Fatal("FileTree.Dir is nil after modification")
+	}
+	if _, ok := info.FileTree.Dir["test.txt"]; !ok {
+		t.Fatal("test.txt not found in FileTree after modification")
+	}
+}
+
+// TestModifyTorrentV2_UpdateSource tests updating source field on v2 torrents
+func TestModifyTorrentV2_UpdateSource(t *testing.T) {
+	// Create a simple v2 torrent
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	createOpts := CreateOptions{
+		Path:      testFile,
+		Format:    FormatV2,
+		NoDate:    true,
+		NoCreator: true,
+	}
+
+	torrent, err := CreateTorrent(createOpts)
+	if err != nil {
+		t.Fatalf("CreateTorrent() v2 error = %v", err)
+	}
+
+	// Save original torrent
+	originalPath := filepath.Join(tmpDir, "original.torrent")
+	f, err := os.Create(originalPath)
+	if err != nil {
+		t.Fatalf("Failed to create torrent file: %v", err)
+	}
+	if err := torrent.Write(f); err != nil {
+		f.Close()
+		t.Fatalf("Failed to write torrent: %v", err)
+	}
+	f.Close()
+
+	// Modify the torrent (set source)
+	modifyOpts := ModifyOptions{
+		Source: "MyTracker",
+		NoDate: true,
+	}
+
+	result, err := ModifyTorrent(originalPath, modifyOpts)
+	if err != nil {
+		t.Fatalf("ModifyTorrent() error = %v", err)
+	}
+
+	if !result.WasModified {
+		t.Fatal("Expected torrent to be modified")
+	}
+
+	// Load modified torrent and verify source is set
+	modifiedMi, err := metainfo.LoadFromFile(result.OutputPath)
+	if err != nil {
+		t.Fatalf("Failed to load modified torrent: %v", err)
+	}
+
+	var infoMap map[string]interface{}
+	if err := bencode.Unmarshal(modifiedMi.InfoBytes, &infoMap); err != nil {
+		t.Fatalf("Failed to unmarshal info: %v", err)
+	}
+
+	sourceVal, ok := infoMap["source"]
+	if !ok {
+		t.Fatal("Source field not found in info dictionary")
+	}
+
+	if sourceVal != "MyTracker" {
+		t.Errorf("Source = %v, want MyTracker", sourceVal)
+	}
+
+	// Verify FileTree is preserved
+	info, err := modifiedMi.UnmarshalInfo()
+	if err != nil {
+		t.Fatalf("Failed to unmarshal info: %v", err)
+	}
+
+	if info.FileTree.Dir == nil {
+		t.Fatal("FileTree.Dir is nil after modification")
+	}
+	if _, ok := info.FileTree.Dir["test.txt"]; !ok {
+		t.Fatal("test.txt not found in FileTree after modification")
+	}
+}
+
+// TestModifyTorrentV2_MultiFile tests modifying a multi-file v2 torrent
+func TestModifyTorrentV2_MultiFile(t *testing.T) {
+	// Create a multi-file v2 torrent
+	tmpDir := t.TempDir()
+	contentDir := filepath.Join(tmpDir, "content")
+	if err := os.MkdirAll(contentDir, 0755); err != nil {
+		t.Fatalf("Failed to create content dir: %v", err)
+	}
+
+	// Create multiple files
+	files := map[string]string{
+		"file1.txt": "content1",
+		"file2.txt": "content2",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(contentDir, name), []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create %s: %v", name, err)
+		}
+	}
+
+	createOpts := CreateOptions{
+		Path:      contentDir,
+		Format:    FormatV2,
+		NoDate:    true,
+		NoCreator: true,
+	}
+
+	torrent, err := CreateTorrent(createOpts)
+	if err != nil {
+		t.Fatalf("CreateTorrent() v2 error = %v", err)
+	}
+
+	// Save original torrent
+	originalPath := filepath.Join(tmpDir, "original.torrent")
+	f, err := os.Create(originalPath)
+	if err != nil {
+		t.Fatalf("Failed to create torrent file: %v", err)
+	}
+	if err := torrent.Write(f); err != nil {
+		f.Close()
+		t.Fatalf("Failed to write torrent: %v", err)
+	}
+	f.Close()
+
+	// Modify with multiple options
+	private := true
+	modifyOpts := ModifyOptions{
+		Comment:   "Multi-file v2",
+		Source:    "TestSource",
+		IsPrivate: &private,
+		NoDate:    true,
+	}
+
+	result, err := ModifyTorrent(originalPath, modifyOpts)
+	if err != nil {
+		t.Fatalf("ModifyTorrent() error = %v", err)
+	}
+
+	if !result.WasModified {
+		t.Fatal("Expected torrent to be modified")
+	}
+
+	// Load modified torrent
+	modifiedMi, err := metainfo.LoadFromFile(result.OutputPath)
+	if err != nil {
+		t.Fatalf("Failed to load modified torrent: %v", err)
+	}
+
+	// Verify all modifications
+	if modifiedMi.Comment != "Multi-file v2" {
+		t.Errorf("Comment = %q, want Multi-file v2", modifiedMi.Comment)
+	}
+
+	var infoMap map[string]interface{}
+	if err := bencode.Unmarshal(modifiedMi.InfoBytes, &infoMap); err != nil {
+		t.Fatalf("Failed to unmarshal info: %v", err)
+	}
+
+	if infoMap["source"] != "TestSource" {
+		t.Errorf("Source = %v, want TestSource", infoMap["source"])
+	}
+
+	if privateVal, ok := infoMap["private"]; !ok || privateVal != int64(1) {
+		t.Errorf("Private = %v, want 1", privateVal)
+	}
+
+	// Verify FileTree still has both files
+	info, err := modifiedMi.UnmarshalInfo()
+	if err != nil {
+		t.Fatalf("Failed to unmarshal info: %v", err)
+	}
+
+	if info.FileTree.Dir == nil {
+		t.Fatal("FileTree.Dir is nil after modification")
+	}
+	for name := range files {
+		if _, ok := info.FileTree.Dir[name]; !ok {
+			t.Errorf("%s not found in FileTree after modification", name)
+		}
+	}
 }
