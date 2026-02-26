@@ -65,6 +65,11 @@ func VerifyData(opts VerifyOptions) (*VerificationResult, error) {
 		return nil, fmt.Errorf("could not unmarshal info dictionary from %q: %w", opts.TorrentPath, err)
 	}
 
+	// Route to v2 verifier for v2-only torrents
+	if info.MetaVersion == 2 && !info.HasV1() {
+		return VerifyDataV2(opts, mi, &info)
+	}
+
 	mappedFiles := make([]fileEntry, 0)
 	var totalSize int64
 	var missingFiles []string

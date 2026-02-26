@@ -28,7 +28,7 @@ func createTestFilesFastForVerify(t *testing.T, numFiles int, fileSize, pieceLen
 		pattern[i] = byte((i*11 + 7) % 251) // Slightly different pattern for verify tests
 	}
 
-	contentPath := tempDir // Base path for content
+	var contentPath string
 
 	if numFiles == 1 {
 		// For single file tests, create the file directly in tempDir
@@ -60,7 +60,6 @@ func createTestFilesFastForVerify(t *testing.T, numFiles int, fileSize, pieceLen
 
 		files = append(files, fileEntry{path: path, length: fileSize, offset: 0})
 		contentPath = path // For single file, content path is the file itself
-		offset += fileSize
 
 		// Calculate expected hashes
 		h := sha1.New()
@@ -597,7 +596,7 @@ func TestVerifyData_EdgeCases(t *testing.T) {
 			}
 			t.Cleanup(func() { os.RemoveAll(tempDir) })
 
-			contentPath := tempDir
+			var contentPath string
 			var createPath string // Path used for CreateTorrent
 
 			if tt.name == "MultiFile With Empty File" {
