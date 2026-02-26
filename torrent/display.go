@@ -255,20 +255,35 @@ func (d *Display) ShowWarning(msg string) {
 }
 
 func (d *Display) ShowTorrentInfo(t *Torrent, info *metainfo.Info) {
-	fmt.Fprintf(d.output, "\n%s\n", magenta("Torrent info:"))
-	fmt.Fprintf(d.output, "  %-13s %s\n", label("Name:"), info.Name)
-	// For pure v2 torrents, show SHA-256 hash; for v1/hybrid, show SHA-1
+	// For pure v2 torrents:
+	// - hash SHA-256
+	// - calculate pieces from total size and piece length
+	// For v1/hybrid:
+	// - hash SHA-1
+	// - flat pieces (original logic)
 	var hashStr string
+	var numPieces int
 	if info.MetaVersion == 2 && !info.HasV1() {
 		v2Hash := infohash_v2.HashBytes(t.InfoBytes)
 		hashStr = v2Hash.String()
+
+		// Note: this formula works for v1 too, but we preserve original logic
+		totalLength := info.TotalLength()
+		pieceLength := info.PieceLength
+		if pieceLength > 0 {
+			numPieces = int((totalLength + pieceLength - 1) / pieceLength)
+		}
 	} else {
 		hashStr = t.HashInfoBytes().String()
+		numPieces = len(info.Pieces) / 20
 	}
+
+	fmt.Fprintf(d.output, "\n%s\n", magenta("Torrent info:"))
+	fmt.Fprintf(d.output, "  %-13s %s\n", label("Name:"), info.Name)
 	fmt.Fprintf(d.output, "  %-13s %s\n", label("Hash:"), hashStr)
 	fmt.Fprintf(d.output, "  %-13s %s\n", label("Size:"), d.formatter.FormatBytes(info.TotalLength()))
 	fmt.Fprintf(d.output, "  %-13s %s\n", label("Piece length:"), d.formatter.FormatBytes(info.PieceLength))
-	fmt.Fprintf(d.output, "  %-13s %d\n", label("Pieces:"), len(info.Pieces)/20)
+	fmt.Fprintf(d.output, "  %-13s %d\n", label("Pieces:"), numPieces)
 
 	magnet, err := t.MagnetV2()
 	if err == nil {
@@ -319,7 +334,6 @@ func (d *Display) ShowTorrentInfo(t *Torrent, info *metainfo.Info) {
 	}
 
 	fmt.Fprintln(d.output)
-
 }
 
 // ShowFileTree displays the file structure of a multi-file torrent
