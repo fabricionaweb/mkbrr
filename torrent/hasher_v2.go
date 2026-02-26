@@ -36,7 +36,6 @@ type fileHasher struct {
 	results             []fileHash
 	pieceLength         int64
 	display             Displayer
-	bytesProcessed      int64
 	blocksPerPiece      int
 	workers             int
 	bufferPool          *sync.Pool
@@ -259,7 +258,6 @@ func (h *fileHasher) hashFile(fileIdx int, tracker *progressTracker) error {
 		return nil
 	}
 
-	const blockSize = merkle.BlockSize
 	numPieces := int((file.length + h.pieceLength - 1) / h.pieceLength)
 
 	// For single-piece files, use the simple streaming path
@@ -294,7 +292,9 @@ func (h *fileHasher) hashFileSinglePiece(file fileEntry, tracker *progressTracke
 	for {
 		n, err := reader.Read(buf)
 		if n > 0 {
-			hasher.Write(buf[:n])
+			if _, writeErr := hasher.Write(buf[:n]); writeErr != nil {
+				return fmt.Errorf("failed to hash data: %w", writeErr)
+			}
 			tracker.AddBlocks(1, int64(n))
 		}
 		if err != nil {
@@ -325,10 +325,8 @@ func (h *fileHasher) hashFileSequential(file fileEntry, numPieces int, tracker *
 
 	const blockSize = merkle.BlockSize
 	blocksPerPiece := int(h.pieceLength / blockSize)
-	numBlocks := int((file.length + blockSize - 1) / blockSize)
 
-	// Store all block hashes to compute piecesRoot later
-	allBlocks := make([][32]byte, 0, numBlocks)
+	// Store piece roots to compute piecesRoot later
 	pieceRoots := make([][32]byte, 0, numPieces)
 	blockHashes := make([][32]byte, 0, blocksPerPiece)
 
@@ -336,7 +334,6 @@ func (h *fileHasher) hashFileSequential(file fileEntry, numPieces int, tracker *
 		n, err := reader.Read(buf)
 		if n > 0 {
 			blockHash := sha256.Sum256(buf[:n])
-			allBlocks = append(allBlocks, blockHash)
 			blockHashes = append(blockHashes, blockHash)
 
 			if len(blockHashes) == blocksPerPiece {

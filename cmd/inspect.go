@@ -82,6 +82,8 @@ func displayVerboseInfo(rawBytes []byte, mi *metainfo.MetaInfo) {
 			"announce": true, "announce-list": true, "comment": true,
 			"created by": true, "creation date": true, "info": true,
 			"url-list": true, "nodes": true,
+			// BitTorrent v2 (BEP 52) fields - contains binary hash data
+			"piece layers": true,
 		}
 
 		for k, v := range rootMap {
@@ -99,6 +101,8 @@ func displayVerboseInfo(rawBytes []byte, mi *metainfo.MetaInfo) {
 			"files": true, "length": true, "private": true,
 			"source": true, "path": true, "paths": true,
 			"md5sum": true,
+			// BitTorrent v2 (BEP 52) fields
+			"meta version": true, "file tree": true,
 		}
 
 		for k, v := range infoMap {

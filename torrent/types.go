@@ -8,28 +8,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// FormatVersion represents the BitTorrent format version
-const (
-	FormatV1     = 1 // v1 only (default)
-	FormatV2     = 2 // v2 only
-	FormatHybrid = 3 // v1 + v2 hybrid
-)
-
-// ParseFormat parses a format string into a FormatVersion constant.
-// Accepts: "1"/"v1", "2"/"v2", "3"/"hybrid"
-func ParseFormat(s string) (int, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "1", "v1":
-		return FormatV1, nil
-	case "2", "v2":
-		return FormatV2, nil
-	case "3", "hybrid":
-		return FormatHybrid, nil
-	default:
-		return 0, fmt.Errorf("invalid format: %q (expected: 1/v1, 2/v2, or 3/hybrid)", s)
-	}
-}
-
 // ProgressCallback is called during torrent creation to report progress.
 // completed: number of pieces hashed so far
 // total: total number of pieces to hash
@@ -153,4 +131,26 @@ func (c *callbackDisplayer) FinishProgress() {
 // IsBatch implements Displayer interface
 func (c *callbackDisplayer) IsBatch() bool {
 	return false
+}
+
+// FormatVersion represents the BitTorrent format version
+const (
+	FormatV1     = 1 // v1 only (default)
+	FormatV2     = 2 // v2 only
+	FormatHybrid = 3 // v1 + v2 hybrid
+)
+
+// ParseFormat parses a format string into a FormatVersion constant.
+// Accepts: "1"/"v1", "2"/"v2", "3"/"hybrid"
+func ParseFormat(s string) (int, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "1", "v1":
+		return FormatV1, nil
+	case "2", "v2":
+		return FormatV2, nil
+	case "3", "hybrid":
+		return FormatHybrid, nil
+	default:
+		return 0, fmt.Errorf("invalid format: %q (expected: 1/v1, 2/v2, or 3/hybrid)", s)
+	}
 }

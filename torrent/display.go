@@ -192,7 +192,7 @@ func (d *Display) ShowFiles(files []fileEntry, numWorkers, blockWorkers int) {
 		// Display children
 		for i, childName := range childNames {
 			child := node.children[childName]
-			childPrefix := prefix
+			var childPrefix string
 			if prefix == "" {
 				childPrefix = "  "
 			} else {
@@ -339,11 +339,59 @@ func (d *Display) ShowTorrentInfo(t *Torrent, info *metainfo.Info) {
 // ShowFileTree displays the file structure of a multi-file torrent
 // The decision to show the tree is now handled in cmd/inspect.go
 func (d *Display) ShowFileTree(info *metainfo.Info) {
+	isMultiFile := info.IsDir()
+
+	// For v2, IsDir() can return true for single files, so check if actually multi-file
+	if isMultiFile && info.MetaVersion == 2 && !info.HasV1() {
+		isMultiFile = d.isV2MultiFile(info)
+	}
+
+	if !isMultiFile {
+		return
+	}
+
 	fmt.Fprintf(d.output, "%s\n", magenta("File tree:"))
 	fmt.Fprintf(d.output, "%s %s\n", "└─", success(info.Name))
-	for i, file := range info.Files {
+
+	if info.MetaVersion == 2 && !info.HasV1() {
+		d.showV2FileTree(info.FileTree, "  ")
+	} else {
+		d.showV1FileTree(info.Files)
+	}
+
+	fmt.Fprintln(d.output)
+}
+
+// isV2MultiFile checks if v2 torrent is actually multi-file
+// Returns false for single-file torrents
+func (d *Display) isV2MultiFile(info *metainfo.Info) bool {
+	if info.FileTree.Dir == nil {
+		return false
+	}
+
+	// Multiple top-level entries = definitely multi-file
+	if len(info.FileTree.Dir) > 1 {
+		return true
+	}
+
+	// Single entry - check if it's a file or directory
+	for _, entry := range info.FileTree.Dir {
+		if entry.File.Length > 0 {
+			// It's a file - single file torrent
+			return false
+		}
+		// It's a directory - multi-file if non-empty
+		return len(entry.Dir) > 0
+	}
+
+	return false
+}
+
+// showV1FileTree displays v1 format file list
+func (d *Display) showV1FileTree(files []metainfo.FileInfo) {
+	for i, file := range files {
 		prefix := "  ├─"
-		if i == len(info.Files)-1 {
+		if i == len(files)-1 {
 			prefix = "  └─"
 		}
 		fmt.Fprintf(d.output, "%s %s (%s)\n",
@@ -351,7 +399,53 @@ func (d *Display) ShowFileTree(info *metainfo.Info) {
 			success(filepath.Join(file.Path...)),
 			label(d.formatter.FormatBytes(file.Length)))
 	}
-	fmt.Fprintln(d.output)
+}
+
+// showV2FileTree recursively displays v2 format file tree
+func (d *Display) showV2FileTree(ft metainfo.FileTree, prefix string) {
+	// Get sorted directory entries
+	dirs := make([]string, 0, len(ft.Dir))
+	for name := range ft.Dir {
+		dirs = append(dirs, name)
+	}
+	sort.Strings(dirs)
+
+	for i, name := range dirs {
+		entry := ft.Dir[name]
+		isLast := i == len(dirs)-1
+
+		if entry.File.Length > 0 {
+			// It's a file
+			connector := "├─"
+			if isLast {
+				connector = "└─"
+			}
+			fmt.Fprintf(d.output, "%s%s %s (%s)\n",
+				prefix,
+				connector,
+				success(name),
+				label(d.formatter.FormatBytes(entry.File.Length)))
+		} else if entry.Dir != nil {
+			// It's a directory
+			connector := "├─"
+			if isLast {
+				connector = "└─"
+			}
+			fmt.Fprintf(d.output, "%s%s %s\n",
+				prefix,
+				connector,
+				success(name))
+
+			// Recurse into subdirectory
+			var childPrefix string
+			if isLast {
+				childPrefix = prefix + "  "
+			} else {
+				childPrefix = prefix + "│ "
+			}
+			d.showV2FileTree(entry, childPrefix)
+		}
+	}
 }
 
 func (d *Display) ShowOutputPathWithTime(path string, duration time.Duration) {

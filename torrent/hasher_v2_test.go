@@ -102,7 +102,9 @@ func createTestFilesV2(t *testing.T, numFiles int, fileSize int64) ([]fileEntry,
 // calculateExpectedMerkleRoot calculates the expected merkle root for content
 func calculateExpectedMerkleRoot(content []byte) [32]byte {
 	hasher := merkle.NewHash()
-	hasher.Write(content)
+	if _, err := hasher.Write(content); err != nil {
+		panic(fmt.Sprintf("failed to hash content: %v", err))
+	}
 	var root [32]byte
 	hasher.Sum(root[:0])
 	return root
