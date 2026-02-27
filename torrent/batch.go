@@ -154,8 +154,21 @@ func validateJob(job BatchJob) error {
 		return fmt.Errorf("output is required")
 	}
 
-	if job.PieceLength != 0 && (job.PieceLength < 14 || job.PieceLength > 27) {
-		return fmt.Errorf("piece length must be between 14 and 27")
+	// Format-aware piece length validation
+	if job.PieceLength != 0 {
+		// Parse format to determine min piece length
+		minPieceLen := uint(16) // v1 default: 64 KiB minimum
+		if job.Format != "" {
+			format, err := ParseFormat(job.Format)
+			if err == nil && format == FormatV2 {
+				minPieceLen = 14 // v2 allows 16 KiB minimum (2^14)
+			}
+		}
+
+		// 27 is our defined limit to both v1 and v2
+		if job.PieceLength < minPieceLen || job.PieceLength > 27 {
+			return fmt.Errorf("piece length must be between %d and 27", minPieceLen)
+		}
 	}
 
 	return nil
